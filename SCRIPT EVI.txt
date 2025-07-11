@@ -1,0 +1,94 @@
+var wilayah =table.filter(ee.Filter.eq('NAME_1','Jakarta Raya'));
+Map.centerObject (table, 11);
+
+//menambahkan evi
+function calculateEVI(image, nirband, redband, blueband){
+  var nir = image.select(nirband);
+  var red = image.select(redband);
+  var blue = image.select(blueband);
+
+
+//rumus
+
+var evi = image.expression(
+  '2.5 * ((nir- red) / ((nir + 6* red - 7.5* blue) + 1))', 
+{
+ 'nir' : nir,
+ 'red' : red,
+ 'blue': blue,
+  
+}).rename('evi');
+
+
+return evi.copyProperties (image,['system:time_start']);
+}
+
+var evi2016 = ee.ImageCollection("COPERNICUS/S2_HARMONIZED")
+             .filterBounds(wilayah)
+             .filterDate('2016-01-01','2016-12-31')
+             .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE',30))
+             .map (function(image){
+               return calculateEVI(image, 'B8','B4','B2');
+             });
+              
+var evi2019 = ee.ImageCollection("COPERNICUS/S2_HARMONIZED")
+             .filterBounds(wilayah)
+             .filterDate('2019-01-01','2019-12-31')
+             .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE',20))
+             .map (function(image){
+               return calculateEVI(image, 'B8','B4','B2');
+             });
+             
+var evi2024 = ee.ImageCollection("COPERNICUS/S2_HARMONIZED")
+             .filterBounds(wilayah)
+             .filterDate('2024-01-01','2024-12-31')
+             .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE',20))
+             .map (function(image){
+             return calculateEVI(image, 'B8','B4','B2');
+             });
+            
+             
+//memasukkan peta
+var allevi = evi2016.merge(evi2019).merge(evi2024)
+  .filter(ee.Filter.notNull(['system:time_start']));
+
+var medianevi2016= evi2016 .median() .clip(wilayah);
+var medianevi2019= evi2019 .median() .clip(wilayah);
+var medianevi2024= evi2024 .median() .clip(wilayah);
+
+var evipalette =['#A4BD7A','#F0D991','#F48B31','#D97860','#C04C48'];
+var eviParams = {min:-1, max:1, palette: evipalette};
+
+Map.addLayer(medianevi2016, eviParams, 'evi2016');
+Map.addLayer(medianevi2019, eviParams, 'evi2019');
+Map.addLayer(medianevi2024, eviParams, 'evi2024');
+
+var charts = ui.Chart.image.doySeries({
+    imageCollection: allevi,
+    region: wilayah,
+    regionReducer: ee.Reducer.mean(),
+    yearReducer: ee.Reducer.mean(),
+    scale: 50
+  })
+.setOptions({
+  title: 'Variasi evi per Hari (DOY) 2016–2025',
+  hAxis: { title: 'Day of Year' },
+  vAxis: { title: 'evi' },
+  lineWidth: 2,
+  pointSize: 5,
+  colors: ['#88F41D','#D5F016','#EFCD0F','#F17405','#F13507']
+});
+
+print(charts);
+
+
+Export.image.toDrive({
+  image: medianevi2016,
+  description: 'Median_EVI_2016_JakartaRaya',
+  folder: 'GEE_EVI_jakarta',
+  fileNamePrefix: 'EVI_2016_JakartaRaya',
+  scale: 10,
+  region: wilayah.geometry(),
+  maxPixels: 1e13
+});
+
