@@ -1,0 +1,85 @@
+//Definisi area studi
+
+var table = table.filter(ee.Filter.eq('NAME_1', 'Jakarta Raya'));
+Map.centerObject(table,11)
+
+//menghitung ndvi
+
+function calculateNDVI(image, nirBand, redBand) {
+  return image
+    .normalizedDifference([nirBand, redBand])
+    .rename('NDVI')
+    .copyProperties(image, ['system:time_start']);
+}
+//AMBIL  DATA
+
+var ndvi2015 = ee.ImageCollection("COPERNICUS/S2_HARMONIZED")
+           .filterBounds(table)
+           .filterDate('2015-06-27','2015-12-31')
+           .filter (ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE',50))
+           .map (function(image){
+              return calculateNDVI(image,'B8','B4');
+             
+           });
+              
+var ndvi2019 = ee.ImageCollection("COPERNICUS/S2_HARMONIZED")
+           .filterBounds(table)
+           .filterDate('2019-01-01','2019-12-31')
+           .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE',20))
+           .map(function(image){
+              return calculateNDVI(image, 'B8', 'B4');
+           });
+
+var ndvi2024 = ee.ImageCollection("COPERNICUS/S2_HARMONIZED")
+           .filterBounds(table)
+           .filterDate('2024-01-01','2024-12-31')
+           .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE',20))
+           .map(function(image){
+              return calculateNDVI(image, 'B8', 'B4');
+           });
+           
+// GABUNGKAN CITRA
+
+var allndvi = ndvi2015.merge(ndvi2019).merge(ndvi2024);
+
+//tampilkan warna ndvi
+
+var ndvipalette = ['#88F41D','#D5F016','#EFCD0F','#F17405','#F13507'];
+
+//visualisasi ndvi
+
+var ndviParams = {min: 0, max: 1, palette: ndvipalette};
+
+var median2015 = ndvi2015.median().clip(table);
+var median2019 = ndvi2019.median().clip(table);
+var median2024 = ndvi2024.median().clip(table);
+
+//menampilkan
+
+Map.addLayer(median2015, ndviParams, 'ndvi2014');
+Map.addLayer(median2019, ndviParams, 'ndvi2019');
+Map.addLayer(median2024, ndviParams, 'ndvi2024');
+
+print('Koleksi NDVI:', allndvi);
+//grafik
+
+
+var charts = ui.Chart.image.doySeries({
+    imageCollection: allndvi,
+    region: table,
+    regionReducer: ee.Reducer.mean(),
+    yearReducer: ee.Reducer.mean(),
+    scale: 50
+  })
+.setOptions({
+  title: 'Variasi ndvi per Hari (DOY) 2014–2025',
+  hAxis: { title: 'Day of Year' },
+  vAxis: { title: 'NDVI' },
+  lineWidth: 2,
+  pointSize: 5,
+  colors: ['#88F41D','#D5F016','#EFCD0F','#F17405','#F13507']
+});
+
+print(charts);
+
+//download citra
