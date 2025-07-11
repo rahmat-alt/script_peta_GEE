@@ -1,0 +1,81 @@
+var shp = table.filter(ee.Filter.eq('NAME_1','Jakarta Raya'));
+Map.centerObject(shp, 11);
+
+ function getMeanLST(start, end) {
+  return ee.ImageCollection('MODIS/061/MOD11A2')
+    .filterDate(start, end)
+    .select('LST_Day_1km')
+    .mean()
+    .clip(shp)
+    .multiply(0.02)
+    .subtract(273.15);
+}
+  
+
+var lst14 = getMeanLST('2014-01-01','2014-12-31')
+var lst19 = getMeanLST('2019-01-01','2019-12-31')
+var lst24 = getMeanLST('2024-01-01','2024-12-31')
+
+var vis={
+    min: 18,
+    max: 40,
+    palette: ['#1D4877','#1B8A5A','#FBB021','#F68838','#EE3E32']
+  
+};
+
+Map.addLayer(lst14, vis, 'lst2014')
+Map.addLayer(lst19, vis, 'lst2019')
+Map.addLayer(lst24, vis, 'lst2024')
+
+var ch = ee.ImageCollection('MODIS/061/MOD11A2')
+.filterBounds(shp)
+.filterDate("2014-12-31","2025-07-01")
+.select('LST_Day_1km')
+
+.map(function(img){
+  return img
+  .multiply (0.02)
+  .subtract (273.15)
+  .copyProperties(img,['system:time_start']);
+  });
+  
+  var charts = ui.Chart.image.doySeries({
+    imageCollection: ch ,
+    region: shp,
+    regionReducer: ee.Reducer.mean(),
+    yearReducer: ee.Reducer.mean(),
+    scale: 1000
+  })
+.setOptions({
+  title: 'Variasi LST per Hari (DOY) 2014–2025',
+  hAxis: { title: 'Day of Year' },
+  vAxis: { title: 'LST (°C)' },
+  lineWidth: 2,
+  pointSize: 3,
+  colors: ['#1D4877','#1B8A5A','#FBB021','#F68838','#EE3E32']
+});
+
+print(charts);
+
+//legenda
+
+var panel = ui.Panel({
+  style: { position: 'bottom-right', padding: '5px' }
+});
+panel.add(ui.Label({ value: 'Klasifikasi Suhu', style: { fontSize: '15px', fontWeight: 'bold' } }));
+
+var colors = vis.palette;
+var labels = ['Sangat Rendah','Rendah','Sedang','Tinggi','Sangat Tinggi'];
+
+colors.forEach(function(c, i) {
+  panel.add(ui.Panel({
+    widgets: [
+      ui.Label('', { backgroundColor: c, padding: '10px', margin: '0 4px 0 0' }),
+      ui.Label(labels[i])
+    ],
+    layout: ui.Panel.Layout.Flow('horizontal')
+  }));
+});
+Map.add(panel);
+
+
